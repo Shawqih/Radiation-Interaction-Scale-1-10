@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Radiation Lab</title>
+    <style>
+        :root {
+            --primary-glow: #00e5ff;
+            --alpha-color: #ff3c3c;
+            --beta-color: #ffde37;
+            --gamma-color: #00ff88;
+        }
+
+        body {
+            margin: 0;
+            background: radial-gradient(circle at center, #10141d 0%, #050505 100%);
+            overflow: hidden;
+            color: white;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            user-select: none;
+        }
+
+        /* Sci-Fi Grid Background */
+        body::before {
+            content: "";
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            top: -50%;
+            left: -50%;
+            background-image: 
+                linear-gradient(rgba(0, 229, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1px, transparent 1px);
+            background-size: 50px 50px;
+            transform: perspective(500px) rotateX(60deg);
+            z-index: 0;
+            animation: moveGrid 20s linear infinite;
+        }
+
+        @keyframes moveGrid {
+            from { background-position: 0 0; }
+            to { background-position: 0 1000px; }
+        }
+
+        #ui-layer {
+            position: relative;
+            z-index: 10;
+            pointer-events: none;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 40px;
+            box-sizing: border-box;
+        }
+
+        .header {
+            text-align: center;
+        }
+
+        #label {
+            font-size: 14px;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+            color: var(--primary-glow);
+            text-shadow: 0 0 10px var(--primary-glow);
+        }
+
+        #num-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        #num {
+            font-size: 220px;
+            font-weight: 900;
+            line-height: 1;
+            background: linear-gradient(to bottom, #fff, #666);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 30px var(--primary-glow));
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .controls {
+            pointer-events: all;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+            padding: 30px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            width: 400px;
+            margin: 0 auto;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        input[type=range] {
+            width: 100%;
+            appearance: none;
+            background: rgba(255,255,255,0.1);
+            height: 4px;
+            border-radius: 2px;
+            outline: none;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: var(--primary-glow);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 15px var(--primary-glow);
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #888;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .barrier-label {
+            position: absolute;
+            right: 10%;
+            top: 50%;
+            transform: translateY(-50%);
+            writing-mode: vertical-rl;
+            color: rgba(255,255,255,0.2);
+            font-size: 12px;
+            letter-spacing: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="c"></canvas>
+    <div class="barrier-label">DENSITY BARRIER FIELD</div>
+
+    <div id="ui-layer">
+        <div class="header">
+            <div id="label">Level 1: Low Energy</div>
+            <p style="font-size: 10px; color: #555;">IONIZING RADIATION INTERACTION SIMULATOR V2.0</p>
+        </div>
+
+        <div id="num-container">
+            <div id="num">1</div>
+        </div>
+
+        <div class="controls">
+            <input id="slider" type="range" min="1" max="10" value="1">
+            <div class="stats">
+                <span id="stat-type">TYPE: ALPHA</span>
+                <span id="stat-mass">MASS: 4 AMU</span>
+                <span id="stat-speed">VELOCITY: 15,000 km/s</span>
+            </div>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const num = document.getElementById("num");
+const slider = document.getElementById("slider");
+const label = document.getElementById("label");
+const statType = document.getElementById("stat-type");
+const statMass = document.getElementById("stat-mass");
+const statSpeed = document.getElementById("stat-speed");
+
+let w, h;
+let particles = [];
+
+function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+}
+window.onresize = resize;
+resize();
+
+class Particle {
+    constructor(level) {
+        this.init(level);
+    }
+
+    init(level) {
+        let type = level <= 3 ? "alpha" : (level <= 7 ? "beta" : "gamma");
+        this.x = w / 2;
+        this.y = h / 2;
+        this.type = type;
+        this.life = 100 + Math.random() * 100;
+        this.alpha = 1;
+        
+        const angle = Math.random() * Math.PI * 2;
+        const force = Math.random() * level * 2;
+
+        if(type === "alpha") {
+            this.size = Math.random() * 4 + 2;
+            this.color = "#ff3c3c";
+            this.vx = Math.cos(angle) * (2 + force);
+            this.vy = Math.sin(angle) * (2 + force);
+            this.decay = 0.02;
+            this.friction = 0.98;
+        } else if(type === "beta") {
+            this.size = Math.random() * 2 + 1;
+            this.color = "#ffde37";
+            this.vx = Math.cos(angle) * (5 + force * 2);
+            this.vy = Math.sin(angle) * (5 + force * 2);
+            this.decay = 0.01;
+            this.friction = 0.995;
+        } else {
+            this.size = 1;
+            this.color = "#00ff88";
+            this.vx = Math.cos(angle) * (10 + force * 3);
+            this.vy = Math.sin(angle) * (10 + force * 3);
+            this.decay = 0.005;
+            this.friction = 1;
+        }
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= this.friction;
+        this.vy *= this.friction;
+        this.life--;
+        this.alpha -= this.decay;
+
+        if(this.x > w * 0.8) {
+            if(this.type === "alpha") { this.alpha = 0; }
+            if(this.type === "beta" && Math.random() > 0.8) { this.alpha = 0; }
+        }
+    }
+
+    draw() {
+        ctx.shadowBlur = this.type === "gamma" ? 15 : 5;
+        ctx.shadowColor = this.color;
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = this.alpha;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function spawn(level) {
+    let count = level * 15;
+    for(let i = 0; i < count; i++) {
+        particles.push(new Particle(level));
+    }
+}
+
+function updateUI(v) {
+    // تم تعديل هذا السطر لإزالة الصفر قبل الرقم
+    num.innerText = v; 
+    
+    num.style.transform = `translate(-50%, -50%) scale(${1 + v * 0.08})`;
+    
+    if(v <= 3) {
+        label.innerText = "Alpha Particle Emission";
+        label.style.color = "var(--alpha-color)";
+        statType.innerText = "TYPE: ALPHA (HE)";
+        statMass.innerText = "MASS: 4.0026 AMU";
+        statSpeed.innerText = "VELOCITY: ~5% Light";
+        document.documentElement.style.setProperty('--primary-glow', 'var(--alpha-color)');
+    } else if(v <= 7) {
+        label.innerText = "Beta Negative Decay";
+        label.style.color = "var(--beta-color)";
+        statType.innerText = "TYPE: BETA (E-)";
+        statMass.innerText = "MASS: 0.0005 AMU";
+        statSpeed.innerText = "VELOCITY: ~90% Light";
+        document.documentElement.style.setProperty('--primary-glow', 'var(--beta-color)');
+    } else {
+        label.innerText = "Gamma Electromagnetic Pulse";
+        label.style.color = "var(--gamma-color)";
+        statType.innerText = "TYPE: GAMMA (PHOTON)";
+        statMass.innerText = "MASS: 0 AMU";
+        statSpeed.innerText = "VELOCITY: 299,792 km/s";
+        document.documentElement.style.setProperty('--primary-glow', 'var(--gamma-color)');
+    }
+}
+
+function animate() {
+    ctx.fillStyle = "rgba(5, 5, 5, 0.15)";
+    ctx.fillRect(0, 0, w, h);
+
+    particles.forEach((p, i) => {
+        p.update();
+        p.draw();
+        if(p.alpha <= 0 || p.life <= 0) particles.splice(i, 1);
+    });
+
+    if(Math.random() > 0.8) spawn(parseInt(slider.value));
+    requestAnimationFrame(animate);
+}
+
+slider.oninput = function() {
+    let v = parseInt(this.value);
+    updateUI(v);
+    particles = [];
+    spawn(v * 2);
+}
+
+updateUI(1);
+animate();
+</script>
+</body>
+</html>
